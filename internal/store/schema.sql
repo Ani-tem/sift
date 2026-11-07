@@ -31,3 +31,12 @@ END;
 CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
     INSERT INTO chunks_fts (chunks_fts, rowid, name, text) VALUES ('delete', old.id, old.name, old.text);
 END;
+
+-- One embedding per chunk: 768 int8 values (see embed.Quantize).
+CREATE TABLE IF NOT EXISTS vectors (
+    chunk_id  INTEGER PRIMARY KEY REFERENCES chunks (id),
+    embedding BLOB NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS chunks_ad_vectors AFTER DELETE ON chunks BEGIN
+    DELETE FROM vectors WHERE chunk_id = old.id;
+END;

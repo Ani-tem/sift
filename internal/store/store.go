@@ -222,8 +222,8 @@ func nameWords(path string) string {
 }
 
 type Stats struct {
-	Files, Chunks, Failed int
-	ByKind                map[string]int
+	Files, Chunks, Vectors, Failed int
+	ByKind                         map[string]int
 }
 
 func (s *Store) Stats(ctx context.Context) (Stats, error) {
@@ -231,7 +231,7 @@ func (s *Store) Stats(ctx context.Context) (Stats, error) {
 	if err := s.db.QueryRowContext(ctx, `SELECT count(*), count(err) FROM files`).Scan(&st.Files, &st.Failed); err != nil {
 		return st, err
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM chunks`).Scan(&st.Chunks); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM chunks), (SELECT count(*) FROM vectors)`).Scan(&st.Chunks, &st.Vectors); err != nil {
 		return st, err
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT kind, count(*) FROM files GROUP BY kind`)
