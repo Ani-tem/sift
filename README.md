@@ -13,6 +13,7 @@ $ sift resume cisco
 Needs Go 1.25+ and Xcode command line tools (for `swiftc`).
 
 ```
+brew install ollama && brew services start ollama && ollama pull nomic-embed-text
 make install        # builds sift + sift-extract into ~/go/bin
 sift index          # first run indexes Desktop, Documents, Downloads
 sift <query>
@@ -29,7 +30,7 @@ See [docs/design.md](docs/design.md). In short: a Go walker finds changed files 
 
 - [x] 1. Incremental indexer, text/PDF/OCR extraction, FTS5 keyword search
 - [ ] 2. Watch mode (FSEvents) + launchd background agent
-- [ ] 3. Local embeddings (Ollama) + semantic search
-- [ ] 4. Hybrid ranking (RRF) + eval set (recall@5)
+- [x] 3. Local embeddings (Ollama, int8-quantized) + semantic search — brute force: 111 ms over 60k vectors
+- [ ] 4. Hybrid ranking (RRF) ✅ — eval set (recall@5) still to do
 - [ ] 5. HNSW vector index from scratch, benchmarked against brute force
 - [ ] 6. Menu bar app + global hotkey

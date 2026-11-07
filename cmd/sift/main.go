@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Ani-tem/sift/internal/embed"
 	"github.com/Ani-tem/sift/internal/extract"
 	"github.com/Ani-tem/sift/internal/indexer"
 	"github.com/Ani-tem/sift/internal/store"
@@ -88,12 +89,41 @@ func index(ctx context.Context, st *store.Store, roots []string) error {
 	s, err := ix.Run(ctx, roots)
 	fmt.Fprintf(os.Stderr, "\r%d files seen: %d indexed, %d unchanged, %d failed, %d removed in %s\n",
 		s.Seen, s.Indexed, s.Unchanged, s.Failed, s.Removed, time.Since(start).Round(time.Millisecond))
+	if err != nil {
+		return err
+	}
+
+	ec := embed.New()
+	if !ec.Available(ctx) {
+		fmt.Fprintln(os.Stderr, "Ollama isn't running, so meaning-based search is off (keyword search works). Start it: brew services start ollama")
+		return nil
+	}
+	start = time.Now()
+	done, failed, err := indexer.Embed(ctx, st, ec, ix.Log, func(done, total int) {
+		fmt.Fprintf(os.Stderr, "\rembedded %d/%d chunks", done, total)
+	})
+	if done+failed > 0 {
+		fmt.Fprintf(os.Stderr, "\rembedded %d chunks (%d failed) in %s\n",
+			done, failed, time.Since(start).Round(time.Millisecond))
+	}
 	return err
 }
 
 func search(ctx context.Context, st *store.Store, q string) error {
 	start := time.Now()
-	hits, err := st.Search(ctx, q, 10)
+	mode := "keyword"
+	var hits []store.Hit
+	var err error
+	if ec := embed.New(); ec.Available(ctx) {
+		var qv []float32
+		if qv, err = ec.Query(ctx, q); err != nil {
+			return err
+		}
+		mode = "hybrid"
+		hits, err = st.Hybrid(ctx, q, embed.Quantize(qv), 10)
+	} else {
+		hits, err = st.Search(ctx, q, 10)
+	}
 	if err != nil {
 		return err
 	}
@@ -111,7 +141,7 @@ func search(ctx context.Context, st *store.Store, q string) error {
 		snip := strings.NewReplacer(store.Mark, "\x1b[1;33m", store.Unmark, "\x1b[0m").Replace(h.Snippet)
 		fmt.Printf("\x1b[1m%s\x1b[0m  \x1b[2m%s\x1b[0m\n   %s\n\n", p, h.Kind, snip)
 	}
-	fmt.Fprintf(os.Stderr, "%d results in %s\n", len(hits), took.Round(time.Microsecond))
+	fmt.Fprintf(os.Stderr, "%d results in %s (%s)\n", len(hits), took.Round(time.Millisecond), mode)
 	return nil
 }
 
@@ -120,7 +150,7 @@ func stats(ctx context.Context, st *store.Store) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%d files, %d chunks, %d failed\n", s.Files, s.Chunks, s.Failed)
+	fmt.Printf("%d files, %d chunks (%d embedded), %d failed\n", s.Files, s.Chunks, s.Vectors, s.Failed)
 	for k, n := range s.ByKind {
 		fmt.Printf("  %-6s %d\n", k, n)
 	}
